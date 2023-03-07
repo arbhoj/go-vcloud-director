@@ -172,35 +172,46 @@ func (vcdClient *VCDClient) Authenticate(username, password, org string) error {
 	return err
 }
 
+//Arvind Bhoj - Temp Workaround - Storing tokens for reuse to avoid calls to auth api endpoint
+//Copy paste this whole modified function as it is.
+
 // GetAuthResponse performs authentication and returns the full HTTP response
 // The purpose of this function is to preserve information that is useful
 // for token-based authentication
 func (vcdClient *VCDClient) GetAuthResponse(username, password, org string) (*http.Response, error) {
-	// LoginUrl
-	err := vcdClient.vcdloginurl()
-	if err != nil {
-		return nil, fmt.Errorf("error finding LoginUrl: %s", err)
-	}
+    // LoginUrl
+    err := vcdClient.vcdloginurl()
+    if err != nil {
+        return nil, fmt.Errorf("error finding LoginUrl: %s", err)
+    }
 
-	// Choose correct auth mechanism based on what type of authentication is used. The end result
-	// for each of the below functions is to set authorization token vcdCli.Client.VCDToken.
-	var resp *http.Response
-	switch {
-	case vcdClient.Client.UseSamlAdfs:
-		err = vcdClient.authorizeSamlAdfs(username, password, org, vcdClient.Client.CustomAdfsRptId)
-		if err != nil {
-			return nil, fmt.Errorf("error authorizing SAML: %s", err)
-		}
-	default:
-		// Authorize
-		resp, err = vcdClient.vcdCloudApiAuthorize(username, password, org)
-		if err != nil {
-			return nil, fmt.Errorf("error authorizing: %s", err)
-		}
-	}
+    // Choose correct auth mechanism based on what type of authentication is used. The end result
+    // for each of the below functions is to set authorization token vcdCli.Client.VCDToken.
+    var resp *http.Response
+    switch {
+    case vcdClient.Client.UseSamlAdfs:
+        err = vcdClient.authorizeSamlAdfs(username, password, org, vcdClient.Client.CustomAdfsRptId)
+        if err != nil {
+            return nil, fmt.Errorf("error authorizing SAML: %s", err)
+        }
+    default:
+        // Authorize
+        resp, err = vcdClient.vcdCloudApiAuthorize(username, password, org)
+        if err != nil {
+            return nil, fmt.Errorf("error authorizing: %s", err)
+        }
+    }
 
-	vcdClient.LogSessionInfo()
-	return resp, nil
+    vcdClient.LogSessionInfo()
+
+    //Arvind - Bhoj If the file doesn't exist, create it, or append to the file
+    f, err := os.OpenFile(fmt.Sprint("/tmp/%s-%s-token", org, username), os.O_CREATE|os.O_WRONLY, 0644)
+    if err != nil {
+        util.Logger.Printf("[ERROR]: %s", err)
+    }
+    defer f.Close()
+    f.WriteString(resp.Header.Get(BearerTokenHeader))
+    return resp, nil
 }
 
 // SetToken will set the authorization token in the client, without using other credentials
